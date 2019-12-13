@@ -30,6 +30,12 @@
    * 認証情報：2. で作成した認証情報名
    * 制限：servers
    * オプション：権限昇格の有効化
+   * 追加変数：YAML にて以下の要領で記載
+        ```
+        ---
+        borgbackup_install_from_repo: True
+        borgbackup_install_from_binary: False
+        ```
 5. 1～3 を使用するテンプレートを【ホスト毎に】新規作成します。
    * 名前： (ホスト名が判る適切な名前)
    * ジョブタイプ：実行
@@ -39,10 +45,29 @@
    * 認証情報：2. で作成した認証情報名
    * 制限：（ホスト名）
    * オプション：権限昇格の有効化
+   * 追加変数：YAML にて以下の要領で記載
+        ```
+        ---
+        borgbackup_install_from_repo: True
+        borgbackup_install_from_binary: False
+        borgbackup_client_backup_server: (バックアップサーバのIPアドレス)
+        borgbackup_client_jobs:
+          - name: system
+            directories:
+              - /etc
+              - /home
+              - /var
+            excludes:
+              - 're:^/var/lib/apt'
+              - 're:^/var/[^/]+\/cache/'
+        borgbackup_prune_jobs:
+          - name: system
+            prune_options: "--keep-daily=7 --keep-weekly=4"
+        ```
 6. 以下の要領で 4～5 を使用するワークフローを作成します。
-   1. 最初 4 のテンプレートのみ実行
-   2. 1. ジョブ成功時に 5 の各ジョブを実行
-7. 6. のワークフローを実行します。
+   i. 最初 4 のテンプレートのみ実行
+   ii. 上記ジョブ成功時に 5 の各ジョブを実行
+7. 6 のワークフローを実行します。
 
 ## ライセンス
 
