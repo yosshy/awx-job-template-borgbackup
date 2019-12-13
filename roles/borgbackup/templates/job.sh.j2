@@ -1,0 +1,28 @@
+#!/bin/sh
+
+set -e
+
+export BORG_RSH="ssh -i {{ borgbackup_client_ssh_key_file }}"
+export BORG_PASSPHRASE="{{ borgbackup_passphrase }}"
+
+REPOSITORY={{ borgbackup_server_user }}@{{ borgbackup_client_backup_server }}:{{ item.name }}
+
+{% if item.pre_commands is defined %}
+{% for command in item.pre_commands %}
+{{ command }}
+{% endfor %}
+{% endif %}
+
+{{ borgbackup_binary }} create \
+  {{ item.options | default('--compression zlib,6') }} \
+  $REPOSITORY::{{ ansible_hostname }}-$(date -Iseconds) \
+  {{ item.directories | join(' ') }} \
+  {% for e in item.excludes %}
+  --exclude '{{ e }}' \
+  {% endfor %}
+
+{% if item.post_commands is defined %}
+{% for command in item.post_commands %}
+{{ command }}
+{% endfor %}
+{% endif %}

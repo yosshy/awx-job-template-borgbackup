@@ -1,0 +1,93 @@
+---
+- name: create group for borg
+  group:
+    name: "{{ borgbackup_server_group }}"
+    state: present
+
+- name: create user for borg
+  user:
+    name: "{{ borgbackup_server_user }}"
+    group: "{{ borgbackup_server_group }}"
+    home: "{{ borgbackup_server_home }}"
+    createhome: yes
+    state: present
+
+- name: check available SSH key types
+  shell: ssh -Q key 2>/dev/null || echo "ssh-rsa"
+  register: borgbackup_register_key_types
+  changed_when: False
+  check_mode: no
+
+- name: generate backup ssh-key
+  user:
+    name: root
+    ssh_key_file: "{{ borgbackup_client_ssh_key_file }}"
+    ssh_key_type: "{{ borgbackup_client_ssh_key_type }}"
+    ssh_key_comment: "{{ borgbackup_client_ssh_key_comment }}"
+    ssh_key_bits: 4096
+    generate_ssh_key: yes
+
+- name: fetch backup ssh-pubkey
+  command: "cat {{ borgbackup_client_ssh_key_file }}.pub"
+  check_mode: no
+  register: borgbackup_client_ssh_pubkey_file
+  changed_when: False
+
+- name: add ssh-pubkey to backup server
+  delegate_to: "{{ borgbackup_client_backup_server }}"
+  # Start the delegate from the ansible master to avoid distributing more keys
+  connection: local
+  authorized_key:
+    user: "{{ borgbackup_server_user }}"
+    key: "{{ borgbackup_client_ssh_pubkey_file.stdout }}"
+    key_options: 'command="cd {{ borgbackup_server_pool }}/{{ inventory_hostname }};borg serve --restrict-to-path {{ borgbackup_server_pool }}/{{ inventory_hostname }}",no-port-forwarding,no-X11-forwarding,no-pty,no-agent-forwarding,no-user-rc'
+
+- name: create repo path for host
+  delegate_to: "{{ borgbackup_client_backup_server }}"
+  # Start the delegate from the ansible master to avoid distributing more keys
+  connection: local
+  file:
+    path: "{{ borgbackup_server_pool }}/{{ inventory_hostname }}"
+    owner: "{{ borgbackup_server_user }}"
+    group: "{{ borgbackup_server_group }}"
+    mode: 0700
+    state: directory
+
+- name: backup scripts dir
+  file:
+    path: "{{ borgbackup_client_scripts_dir }}"
+    owner: root
+    group: root
+    mode: 0750
+    state: directory
+
+- name: check if the repositories already exist
+  command: "{{ borgbackup_binary }} list {{ borgbackup_server_user }}@{{ borgbackup_client_backup_server }}:{{ item.name }}"
+  environment:
+    - BORG_RSH: "ssh -o StrictHostKeyChecking=no -i {{ borgbackup_client_ssh_key_file }}"
+    - BORG_PASSPHRASE: "{{ borgbackup_passphrase }}"
+  with_items: "{{ borgbackup_client_jobs }}"
+  register: list_repos
+  failed_when: False
+  changed_when: False
+  check_mode: no
+
+- name: initialize empty list of initialized repositories
+  set_fact:
+    initialized_repos: []
+
+- name: store only initialized repositories in the list
+  set_fact:
+    initialized_repos: "{{ initialized_repos }} + [ '{{ item.item.name }}' ]"
+  with_items: "{{ list_repos.results }}"
+  when: item.rc == 0
+
+- name: initialize repositories
+  command: "{{ borgbackup_binary }} init --encryption {{ borgbackup_encryption_mode }} {{ borgbackup_server_user }}@{{ borgbackup_client_backup_server }}:{{ item.name }}"
+  environment:
+    - BORG_RSH: "ssh -o StrictHostKeyChecking=no -i {{ borgbackup_client_ssh_key_file }}"
+    - BORG_PASSPHRASE: "{{ borgbackup_passphrase }}"
+  with_items: "{{ borgbackup_client_jobs }}"
+  register: borgbackup_initialize_result
+  failed_when: (borgbackup_initialize_result.rc != 0) and (borgbackup_initialize_result.stderr != "") and ('already exists' not in borgbackup_initialize_result.stderr)
+  when: item.name not in initialized_repos

@@ -1,0 +1,13 @@
+---
+- name: Setup backup server with Borgbackup
+  hosts: all
+  tasks:
+    - name: install borgbackup command
+      include_role:
+        name: borgbackup
+        tasks_from: install
+
+    - name: setup borgbackup for server
+      include_role:
+        name: borgbackup
+        tasks_from: borgbackup_server

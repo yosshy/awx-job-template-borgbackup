@@ -1,0 +1,14 @@
+---
+- name: Enable EPEL
+  yum:
+    name: epel-release
+    state: present
+
+- name: Install borgbackup
+  yum:
+    name: borgbackup
+    state: present
+
+- name: Configure borg binary location based on installed version
+  set_fact:
+    borgbackup_binary: "/usr/bin/borg"

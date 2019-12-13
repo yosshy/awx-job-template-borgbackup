@@ -1,0 +1,19 @@
+---
+- name: Backup files with Borgbackup
+  hosts: all
+  tasks:
+    - name: install borgbackup command
+      include_role:
+        name: borgbackup
+        tasks_from: install
+
+    - name: setup borgbackup for client
+      include_role:
+        name: borgbackup
+        tasks_from: borgbackup_client
+
+    - name: run borgbackup
+      include_role:
+        name: borgbackup
+        tasks_from: do_backup
+

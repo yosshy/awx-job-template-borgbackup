@@ -1,0 +1,31 @@
+---
+- name: backup scripts
+  template:
+    dest: "{{ borgbackup_client_scripts_dir }}/{{ item.name }}.sh"
+    src: job.sh.j2
+    owner: root
+    group: root
+    mode: 0700
+  with_items: "{{ borgbackup_client_jobs }}"
+
+- name: deploy prune scripts
+  template:
+    dest: "{{ borgbackup_client_scripts_dir }}/prune_{{ item.name }}.sh"
+    src: prune_job.sh.j2
+    owner: root
+    group: root
+    mode: 0700
+  with_items: "{{ borgbackup_prune_jobs }}"
+  when: borgbackup_prune_enabled
+
+- name: kick backup script
+  command: "{{ borgbackup_client_scripts_dir }}/{{ item.name }}.sh"
+  with_items: "{{ borgbackup_client_jobs }}"
+  register: backup_result
+
+- name: kick prune script
+  command: "{{ borgbackup_client_scripts_dir }}/prune_{{ item.name }}.sh"
+  with_items: "{{ borgbackup_prune_jobs | default([]) }}"
+  when:
+    - borgbackup_prune_enabled
+    - backup_result is succeeded
